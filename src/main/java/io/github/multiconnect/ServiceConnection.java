@@ -105,6 +105,7 @@ public class ServiceConnection implements Runnable {
 		int ret = 0;
 		try {
 			ret = config.getIntParam("Selector");
+			logger.log(config.getName() + " adding Selector PC " + ret);
 		} catch (Exception ex) {
 		}
 		return ret;
@@ -124,7 +125,7 @@ public class ServiceConnection implements Runnable {
 					key = Integer.parseInt(sar[i].trim());
 				ret.put(key, this);
 				if (key == 0)
-					logger.log(config.getName() + " adding DEFAULT");
+					logger.log(config.getName() + " adding TG DEFAULT");
 				else
 					logger.log(config.getName() + " adding TG " + key);
 			} catch (Exception ex) {
@@ -136,6 +137,30 @@ public class ServiceConnection implements Runnable {
 			for (Integer key : transOut.keySet()) {
 				if (ret.put(key, this) == null)
 					logger.log(config.getName() + " adding TG " + key);
+			}
+		}
+
+		return ret;
+	}
+	
+	public HashMap<Integer, ServiceConnection> getRoutesPC() {
+		HashMap<Integer, ServiceConnection> ret = new HashMap<Integer, ServiceConnection>();
+		String val = config.getParam(ConfigSection.PCLIST);
+
+		String[] sar = val.split(",");
+		for (int i = 0; i < sar.length; i++) {
+			try {
+				int key;
+				if (sar[i].trim().equals("*"))
+					key = 0;
+				else
+					key = Integer.parseInt(sar[i].trim());
+				ret.put(key, this);
+				if (key == 0)
+					logger.log(config.getName() + " adding PC DEFAULT");
+				else
+					logger.log(config.getName() + " adding PC " + key);
+			} catch (Exception ex) {
 			}
 		}
 
@@ -235,14 +260,17 @@ public class ServiceConnection implements Runnable {
 
 		// May need a better way to tell a group from a person
 		// for now change to group for under 1M
-		if (decode.getDst() < 1000000) {
-			int type = decode.getType();
-			// set Group flag
+		int type = decode.getType();
+		if (decode.getPC()) {
+			// set private call flag
+			bar[15] = (byte) (type | 0x40);
+		} else {
+			// clear private call flag
 			bar[15] = (byte) (type & 0xBF);
 		}
 
 		// check if TG is mapped to a alt tg, rewrite if needed
-		if (transOut != null) {
+		if (!decode.getPC() && transOut != null) {
 			Integer origtg = transOut.get(decode.getDst());
 			if (origtg != null)
 				DMRDecode.intTo3Bytes(origtg, bar, 8);
@@ -254,7 +282,7 @@ public class ServiceConnection implements Runnable {
 
 	public void handleOutgoingMapping(DatagramPacket packet, DMRDecode decode) {
 		// check if TG is mapped to a alt tg, rewrite if needed
-		if (transIn != null) {
+		if (!decode.getPC() && transIn != null) {
 			Integer alttg = transIn.get(decode.getDst());
 			if (logger.log(3))
 				logger.log("handleOutgoingMapping " + decode.getDst() + " " + alttg + " " + transIn);

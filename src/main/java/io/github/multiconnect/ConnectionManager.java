@@ -31,6 +31,7 @@ public class ConnectionManager implements Runnable {
 
 	HashMap<String, ServiceConnection> conMap = new HashMap<String, ServiceConnection>();
 	HashMap<Integer, ServiceConnection> routeMap = new HashMap<Integer, ServiceConnection>();
+	HashMap<Integer, ServiceConnection> routeMapPC = new HashMap<Integer, ServiceConnection>();
 	HashMap<Integer, ServiceConnection> selectorMap = new HashMap<Integer, ServiceConnection>();
 
 	int currentTalker = 0;
@@ -129,11 +130,12 @@ public class ConnectionManager implements Runnable {
 				ServiceConnection con = new ServiceConnection(section);
 				con.setConnectionManager(this);
 				conMap.put(key, con);
-				routeMap.putAll(con.getRoutes());
 				int selector = con.getSelector();
 				if (selector > 0) {
 					selectorMap.put(selector, con);
 				}
+				routeMap.putAll(con.getRoutes());
+				routeMapPC.putAll(con.getRoutesPC());
 				con.start();
 			}
 		}
@@ -148,17 +150,26 @@ public class ConnectionManager implements Runnable {
 		DMRDecode decode = new DMRDecode(bar, len);
 		int dst = decode.getDst();
 		ServiceConnection con = selectorMap.get(dst);
-		if (con != null) {
+		if (decode.getPC() && con != null) {
 			// dst id is a Selector
 			ServiceConnection defaultCon = routeMap.get(DEFAULT_ROUTE);
 			if (defaultCon == null || !defaultCon.getName().equals(con.getName())) {
 				// select this connection as the default route
 				routeMap.put(DEFAULT_ROUTE, con);
-				logger.log("selector: " + dst + " Default Service has been changed to: " + con.getName());
+				logger.log("selector: " + dst + " Default Service for TG has been changed to: " + con.getName());
 			}
-		} else {
+			defaultCon = routeMapPC.get(DEFAULT_ROUTE);
+			if (defaultCon == null || !defaultCon.getName().equals(con.getName())) {
+				// select this connection as the default route
+				routeMapPC.put(DEFAULT_ROUTE, con);
+				logger.log("selector: " + dst + " Default Service for PC has been changed to: " + con.getName());
+			}		} else {
 			// route to appropriate service
-			con = routeMap.get(dst);
+			if (decode.getPC()) {
+				con = routeMapPC.get(dst);
+			} else {
+				con = routeMap.get(dst);
+			}
 			lastDestId = decode.getDst();
 			if (con != null) {
 				markChannelReserve(decode);
@@ -287,7 +298,7 @@ public class ConnectionManager implements Runnable {
 
 				if ((decode.getType() & 0x40) == 0) {
 					int dst = decode.getDst();
-					ServiceConnection curRoute = routeMap.get(dst);
+					ServiceConnection curRoute = (decode.getPC() ? routeMapPC.get(dst) : routeMap.get(dst)) ;
 					if (curRoute == null || !curRoute.getName().equals(sender.getName())) {
 						logger.log(sender.getName() + " Setting return route for tg: " + dst);
 						routeMap.put(decode.getDst(), sender);

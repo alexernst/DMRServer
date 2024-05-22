@@ -5,13 +5,14 @@ import java.net.DatagramPacket;
 public class DMRDecode {
 	public static String[] frameName = new String[] { "voice", "voice_sync", "data_sync", "unknown" };
 	public static String[] voiceSubType = new String[] { "A", "B", "C", "D", "E", "F", " ", " " };
-	public static String[] dataSubType = new String[] { "unknown", "voice_header", "voice_term", "unknown" };
+	public static String[] dataSubType = new String[] { "unknown", "voice_header", "voice_term", "csbk", "mbc_header", "mbc_data", "data_header", "data_rate_1_2", "data_rate_3_4", "idle", "data_rate_1_1", "data_unified" , "unknown", "unknown", "unknown", "unknown"};
 
 	byte[] bar;
 	int len;
 
 	String tag;
 	int type;
+	boolean privatecall;
 	int src;
 	int dst;
 	int rpt;
@@ -21,13 +22,13 @@ public class DMRDecode {
 	int subType;
 
 	boolean terminate = false;
-	
+
 	String decodeString ;
 
 	public DMRDecode(DatagramPacket packet) {
 		parsePacket(packet) ;
 	}
-		
+
 	public DMRDecode(byte[] bar, int len) {
 		this.bar = bar;
 		this.len = len;
@@ -37,9 +38,9 @@ public class DMRDecode {
 	public void parsePacket(DatagramPacket packet) {
 		this.bar = packet.getData();
 		this.len = packet.getLength();
-		decodeString = decode();		
+		decodeString = decode();
 	}
-	
+
 	public String getTag() {
 		return tag;
 	}
@@ -56,11 +57,12 @@ public class DMRDecode {
 			slot = type >> 7 + 1;
 			frame = (type >> 4) & 0x03;
 			subType = type & 0x0F;
+			privatecall = (type & 0x40) == 0x40;
 			String st = " ";
 			if (frame == 0 || frame == 1) {
 				st = voiceSubType[subType & 0x07];
 			} else if (frame == 2) {
-				st = dataSubType[subType & 0x03];
+				st = dataSubType[subType & 0x0f];
 
 				terminate = ((subType & 0x03) == 2);
 			}
@@ -68,8 +70,8 @@ public class DMRDecode {
 			dst = ti(bar, 8, 3) ;
 			rpt = ti(bar, 11, 4) ;
 			stream = ti(bar, 16, 4) ;
-			
-			ret = "len: "+len+" DMRD seq:" + ti_pad(bar[4]) + " src:" + src + " dst:" +dst+ " rpt:"
+
+			ret = "len: "+len+" DMRD seq:" + ti_pad(bar[4]) + " src:" + src + " dst:" + (privatecall ? "PC " : "TG ")+dst+ " rpt:"
 					+ rpt + " slot:" + slot + " strm:" + stream + " data:" + (len - 20) + " frame:"
 					+ frameName[frame] + " " + st;
 		} else if (tag.equals("RPTP")) {
@@ -162,6 +164,10 @@ public class DMRDecode {
 
 	public int getType() {
 		return type;
+	}
+
+	public boolean getPC() {
+		return privatecall;
 	}
 
 	public int getSrc() {
